@@ -1,0 +1,72 @@
+Sub Main()
+    ' Call the function with True to write to a CSV file
+    WriteToFile(True)
+
+    ' Call the function with False to write to a TXT file
+    'WriteToFile(False)
+End Sub
+'[Logic
+Sub WriteToFile(isCSV As Boolean)
+    Dim oAsm As AssemblyDocument = ThisDoc.Document
+    Dim oSelSet As SelectSet = oAsm.SelectSet
+    Dim UoM As UnitsOfMeasure = oAsm.UnitsOfMeasure
+    Dim totMass As Double = 0
+    Dim oList As New List(Of ComponentOccurrence)
+    Dim fileName As String = ThisDoc.PathAndFileName(False)
+
+    If fileName = "" Then
+        MessageBox.Show("Please save the assembly first.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Exit Sub
+    Else
+        fileName = If(isCSV, fileName & ".csv", fileName & ".txt")
+        Dim oWrite As System.IO.StreamWriter = System.IO.File.CreateText(fileName)
+        For Each oObj As Object In oSelSet
+            If TypeOf (oObj) Is ComponentOccurrence Then oList.Add(oObj)
+        Next
+
+        Dim noSelection As Boolean = False
+        If oList.Count = 0 Then
+            noSelection = True
+            For Each oOcc As ComponentOccurrence In oAsm.ComponentDefinition.Occurrences.AllLeafOccurrences
+                If oOcc.Visible Then
+                    totMass = totMass + oOcc.MassProperties.Mass
+                    ' Show individual mass of each component
+                    If isCSV Then
+                        oWrite.WriteLine(oOcc.Name & "," & UoM.GetStringFromValue(oOcc.MassProperties.Mass, UoM.MassUnits))
+                    Else
+                        oWrite.WriteLine("Mass of component " & oOcc.Name & ": " & UoM.GetStringFromValue(oOcc.MassProperties.Mass, UoM.MassUnits))
+                    End If
+                End If
+            Next
+        Else
+            For Each oOcc As ComponentOccurrence In oList
+                Dim parentSelected As Boolean = False
+                'Make sure something isn't selected twice (subassembly and occurrence in subassembly both selected)
+                For Each oParentOcc As ComponentOccurrence In oOcc.OccurrencePath
+                    If oList.OfType(Of ComponentOccurrence).Where(Function(x As ComponentOccurrence) x.Definition Is oParentOcc.Definition _
+                    AndAlso x.Definition IsNot oOcc.Definition).Count > 0 Then parentSelected = True
+                Next
+                '--------------------------------------------------------------------------------------------------
+                If parentSelected = False Then
+                    totMass = totMass + oOcc.MassProperties.Mass
+                    ' Show individual mass of each component
+                    If isCSV Then
+                        oWrite.WriteLine(oOcc.Name & "," & UoM.GetStringFromValue(oOcc.MassProperties.Mass, UoM.MassUnits))
+                    Else
+                        oWrite.WriteLine("Mass of component " & oOcc.Name & ": " & UoM.GetStringFromValue(oOcc.MassProperties.Mass, UoM.MassUnits))
+                    End If
+                End If
+            Next
+        End If
+
+        ' Show total mass
+        If isCSV Then
+            oWrite.WriteLine(If(noSelection, "Total mass of visible components", "Total mass of selected components") & "," & UoM.GetStringFromValue(totMass, UoM.MassUnits))
+        Else
+            oWrite.WriteLine(If(noSelection, "Total mass of visible components", "Total mass of selected components") & vbCrLf & UoM.GetStringFromValue(totMass, UoM.MassUnits), "Total mass")
+        End If
+
+        oWrite.Close()
+    End If
+End Sub
+']
